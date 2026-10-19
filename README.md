@@ -5,19 +5,9 @@ Diff·검증 확인 → 승인 Commit → Push → GitHub PR 생성까지 관리
 
 ## 준비 (PC마다 한 번)
 
-자세한 절차는 [SETUP.md](SETUP.md). 설치 후 `npm run doctor -- <저장소 경로>`로 점검한다.
-
-| 항목 | 확인 |
-|---|---|
-| Node.js 22 이상 | `node --version` |
-| Git | `git --version` |
-| Claude Code (로그인 완료) | `claude --version`, `claude` 한 번 실행해 로그인 |
-| GitHub CLI (PR 생성용) | `gh --version`, `gh auth login` |
-
-```
-npm ci
-npm start
-```
+`start.cmd`를 더블클릭한다. Node.js가 없으면 설치하고, 패키지를 준비한 뒤 앱을 실행한다.
+앱의 **환경 점검** 화면에서 Git·Claude Code·GitHub CLI 설치와 로그인, Git 사용자 설정을 버튼으로 해결한다.
+자세한 절차는 [SETUP.md](SETUP.md).
 
 처음 실행하면 저장소를 선택한다. 마지막으로 연 저장소는 다음 실행 때 자동으로 열린다.
 
@@ -118,6 +108,7 @@ verify:                    # 선택
 | `npm run typecheck` | 타입 검사 |
 | `npm run e2e` | 실제 Claude로 전체 흐름 검증 (테스트 저장소 + 로컬 bare 원격 + 대체 gh) |
 | `npm run smoke:ui` | 실제 앱 화면을 자동으로 눌러 전체 흐름 검증, `.sandbox/smoke/`에 캡처 |
+| `npm run smoke:doctor` | 프로그램이 없는 상태를 흉내 내 환경 점검의 설치·설정 버튼 검증 (실제 PC 설정은 바꾸지 않음) |
 | `npm run make-test-repo -- <폴더> --force` | 테스트 저장소만 만들기 |
 
 `e2e`, `smoke:ui`는 실제 Claude를 여러 번 호출한다 (한 번에 약 $0.3~0.5).

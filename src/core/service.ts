@@ -59,6 +59,12 @@ export class WorkflowService extends EventEmitter {
     return this.root;
   }
 
+  /** 프로그램을 설치한 뒤 실행 파일 위치를 다시 찾게 한다. */
+  resetTools() {
+    this.claudeExe = undefined;
+    this.claudeError = undefined;
+  }
+
   private busy(): string | null {
     if (this.active) return 'Claude가 실행 중이에요.';
     if (this.verifying) return '검증이 실행 중이에요.';
@@ -73,6 +79,7 @@ export class WorkflowService extends EventEmitter {
   async openRepo(dir: string): Promise<Snapshot> {
     this.requireIdle();
     const r = await git(dir, ['rev-parse', '--show-toplevel']);
+    if (/ENOENT/.test(r.stderr)) throw new UserError('Git이 설치되어 있지 않아요. 환경 점검에서 Git을 설치하세요.');
     if (r.code !== 0) throw new UserError(`Git 저장소가 아니에요: ${dir}`);
     this.root = path.resolve(r.stdout.trim());
     this.store.lastRepo = this.root;

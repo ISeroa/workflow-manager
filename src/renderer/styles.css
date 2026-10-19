@@ -202,10 +202,15 @@ a { color: var(--accent); }
 .check-status { white-space: nowrap; flex: none; }
 .doctor { padding: 8px 14px 10px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; }
 .doctor .row { margin-bottom: 4px; }
-.doctor-item { display: grid; grid-template-columns: 16px 110px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.doctor-item { display: grid; grid-template-columns: 16px 110px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
 .doctor-name { color: var(--text-2); }
 .doctor-detail { word-break: break-all; }
 .doctor-fix { color: var(--text-2); }
 .d-ok .icon { color: var(--ok); }
 .d-warn .icon { color: var(--warn); }
 .d-fail .icon, .d-fail .doctor-detail { color: var(--danger); }
+.doctor-action { display: flex; gap: 6px; }
+.doctor-action button.small { margin-left: 0; }
+.ok-text { color: var(--ok); }
+.identity-form { display: flex; gap: 6px; margin-top: 4px; max-width: 520px; }
+.identity-form input { flex: 1; }

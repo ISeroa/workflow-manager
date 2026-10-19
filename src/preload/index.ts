@@ -19,6 +19,7 @@ const api: WfApi = {
   createPr: (wp, req) => ipcRenderer.invoke('wf:createPr', wp, req),
   openExternal: (url) => ipcRenderer.invoke('wf:openExternal', url),
   doctor: () => ipcRenderer.invoke('wf:doctor'),
+  fix: (action) => ipcRenderer.invoke('wf:fix', action),
   onRunEvent: (cb) => {
     const h = (_e: unknown, msg: RunEventMessage) => cb(msg);
     ipcRenderer.on('wf:run-event', h);

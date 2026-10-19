@@ -206,11 +206,27 @@ export interface PrRequest {
   manualChecked: string[];
 }
 
+/** 환경 점검 항목을 앱 안에서 해결하는 동작 */
+export type FixAction =
+  | { kind: 'winget'; tool: 'git' | 'gh' | 'claude' | 'node' }
+  | { kind: 'login'; tool: 'claude' | 'gh' }
+  | { kind: 'git-identity'; name?: string; email?: string };
+
+export interface FixResult {
+  ok: boolean;
+  message: string;
+  output?: string;
+}
+
 export interface DoctorCheck {
   name: string;
   status: 'ok' | 'warn' | 'fail';
   detail: string;
   fix?: string;
+  /** 버튼으로 바로 해결할 수 있으면 그 동작과 버튼 이름 */
+  action?: { label: string; action: FixAction };
+  /** 버튼 대신 열 수 있는 안내 링크 */
+  link?: { label: string; url: string };
 }
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -233,6 +249,7 @@ export interface WfApi {
   createPr(wp: string, req: PrRequest): Promise<IpcResult<{ url: string }>>;
   openExternal(url: string): Promise<IpcResult<null>>;
   doctor(): Promise<IpcResult<DoctorCheck[]>>;
+  fix(action: FixAction): Promise<IpcResult<FixResult>>;
   onRunEvent(cb: (msg: RunEventMessage) => void): () => void;
   onVerifyEvent(cb: (msg: VerifyEventMessage) => void): () => void;
 }

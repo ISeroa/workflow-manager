@@ -13,7 +13,8 @@
     "make-test-repo": "node scripts/make-test-repo.mjs",
     "e2e": "npm run build:main && node out/build/scripts/e2e.js",
     "smoke:ui": "npm run build && node scripts/smoke-ui.mjs",
-    "doctor": "npm run build:main && node out/build/scripts/doctor.js"
+    "doctor": "npm run build:main && node out/build/scripts/doctor.js",
+    "smoke:doctor": "npm run build && node scripts/smoke-doctor.mjs"
   },
   "dependencies": {
     "picomatch": "^4.0.7",

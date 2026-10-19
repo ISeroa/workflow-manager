@@ -1,10 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import path from 'node:path';
-import type { CommitRequest, IpcResult, PrRequest, ReviseRequest, RunEventMessage, VerifyEventMessage } from '../shared/types.js';
-import { runDoctor } from '../core/doctor.js';
+import type { CommitRequest, FixAction, IpcResult, PrRequest, ReviseRequest, RunEventMessage, VerifyEventMessage } from '../shared/types.js';
+import { findTools, runDoctor } from '../core/doctor.js';
+import { refreshPath, runFix } from '../core/installer.js';
 import { UserError, WorkflowService } from '../core/service.js';
 import { LocalStore } from '../core/store.js';
 import { runSmoke } from './smoke.js';
+import { runDoctorSmoke } from './smoke-doctor.js';
 
 let win: BrowserWindow | undefined;
 let service: WorkflowService;
@@ -59,6 +61,13 @@ function registerIpc() {
   ipcMain.handle('wf:prView', (_e, wp: string) => wrap(() => service.prView(wp)));
   ipcMain.handle('wf:createPr', (_e, wp: string, req: PrRequest) => wrap(() => service.createPr(wp, req)));
   ipcMain.handle('wf:doctor', () => wrap(() => runDoctor(service.repoRoot)));
+  ipcMain.handle('wf:fix', (_e, action: FixAction) =>
+    wrap(async () => {
+      const r = await runFix(action, findTools());
+      service.resetTools();
+      return r;
+    }),
+  );
   ipcMain.handle('wf:openExternal', (_e, url: string) =>
     wrap(async () => {
       if (!/^https:\/\//i.test(url)) throw new UserError('https 링크만 열 수 있어요.');
@@ -87,7 +96,9 @@ function createWindow() {
   win.on('closed', () => (win = undefined));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // 탐색기나 오래된 터미널에서 실행해도 최근 설치한 프로그램을 찾도록 PATH를 레지스트리 기준으로 갱신한다.
+  await refreshPath().catch(() => {});
   const storeDir = process.env.WF_STORE_DIR ?? app.getPath('userData');
   service = new WorkflowService(new LocalStore(storeDir));
   service.on('run-event', (msg: RunEventMessage) => win?.webContents.send('wf:run-event', msg));
@@ -95,6 +106,7 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   if (process.argv.includes('--smoke')) runSmoke(win!, service);
+  if (process.argv.includes('--smoke-doctor')) runDoctorSmoke(win!);
 });
 
 app.on('window-all-closed', () => app.quit());

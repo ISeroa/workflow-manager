@@ -5,6 +5,8 @@ import {
   type ChangesView,
   type CheckResult,
   type DoctorCheck,
+  type FixAction,
+  type FixResult,
   type IpcResult,
   type PackageView,
   type PrView,
@@ -102,10 +104,34 @@ export function App() {
     }
   }, []);
 
-  // 저장소가 열리거나 바뀌면 환경 점검을 한 번 실행한다.
+  // 앱을 켤 때(저장소 선택 전 포함)와 저장소가 바뀔 때 환경 점검을 실행한다.
   useEffect(() => {
-    if (snap?.root) runDoctor();
+    runDoctor();
   }, [snap?.root, runDoctor]);
+
+  const fix = async (action: FixAction): Promise<FixResult | undefined> => {
+    const r = await call(window.wf.fix(action), setError);
+    // 설치·설정 결과를 반영하려면 다시 점검하고, 저장소 상태(Claude 경로 등)도 새로 읽는다.
+    if (r?.ok && action.kind !== 'login') {
+      await runDoctor();
+      if (snap) await refresh();
+    }
+    return r;
+  };
+
+  const doctorPanel = doctorOpen && (
+    <DoctorPanel
+      checks={doctor}
+      busy={doctorBusy}
+      onRerun={async () => {
+        await runDoctor();
+        if (snap) await refresh();
+      }}
+      onClose={() => setDoctorOpen(false)}
+      onFix={fix}
+      onLink={(url) => window.wf.openExternal(url)}
+    />
+  );
 
   const refresh = useCallback(async () => {
     const s = await call(window.wf.snapshot(), setError);
@@ -359,11 +385,15 @@ export function App() {
   if (!snap) {
     return (
       <div className="app" style={{ gridTemplateRows: 'auto 1fr' }}>
-        {error && <div className="banner error"><span className="grow">{error}</span></div>}
+        <div>
+          {error && <div className="banner error"><span className="grow">{error}</span></div>}
+          {doctorPanel}
+        </div>
         <div className="empty">
           <div style={{ fontSize: 15, color: 'var(--text)' }}>작업할 Git 저장소를 선택하세요</div>
           <div>저장소의 <span className="mono">.workflow/</span> 파일에서 Work Package를 읽어요.</div>
           <button className="primary" onClick={openRepo} data-testid="open-repo">저장소 선택</button>
+          {!doctorOpen && <button onClick={() => (setDoctorOpen(true), runDoctor())}>환경 점검</button>}
         </div>
       </div>
     );
@@ -428,27 +458,7 @@ export function App() {
       </div>
 
       <div>
-        {doctorOpen && (
-          <div className="doctor" data-testid="doctor">
-            <div className="row">
-              <strong>환경 점검</strong>
-              <span className="faint">{doctorBusy ? '점검 중…' : doctor ? `${doctor.filter((c) => c.status === 'ok').length}/${doctor.length} 정상` : ''}</span>
-              <span className="spacer" />
-              <button onClick={runDoctor} disabled={doctorBusy}>다시 점검</button>
-              <button onClick={() => setDoctorOpen(false)}>닫기</button>
-            </div>
-            {doctor?.map((c) => (
-              <div key={c.name} className={`doctor-item d-${c.status}`}>
-                <span className="icon">{c.status === 'ok' ? '✓' : c.status === 'warn' ? '!' : '✕'}</span>
-                <span className="doctor-name">{c.name}</span>
-                <span className="doctor-detail">
-                  {c.detail}
-                  {c.fix && c.status !== 'ok' && <span className="doctor-fix"> → {c.fix}</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        {doctorPanel}
         {error && (
           <div className="banner error" data-testid="error">
             <span className="grow">{error}</span>
@@ -770,6 +780,84 @@ export function App() {
         onCommit={commit}
         onCreatePr={createPr}
       />
+    </div>
+  );
+}
+
+function DoctorPanel(p: {
+  checks: DoctorCheck[] | null;
+  busy: boolean;
+  onRerun: () => Promise<void>;
+  onClose: () => void;
+  onFix: (a: FixAction) => Promise<FixResult | undefined>;
+  onLink: (url: string) => void;
+}) {
+  const [working, setWorking] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, FixResult>>({});
+  const [identity, setIdentity] = useState({ open: false, name: '', email: '' });
+
+  const doFix = async (name: string, action: FixAction) => {
+    setWorking(name);
+    const r = await p.onFix(action);
+    setWorking(null);
+    if (r) setResults((prev) => ({ ...prev, [name]: r }));
+    if (r?.ok && action.kind === 'git-identity') setIdentity({ open: false, name: '', email: '' });
+  };
+
+  const checks = p.checks ?? [];
+  const okCount = checks.filter((c) => c.status === 'ok').length;
+  return (
+    <div className="doctor" data-testid="doctor">
+      <div className="row">
+        <strong>환경 점검</strong>
+        <span className="faint">{p.busy ? '점검 중…' : p.checks ? `${okCount}/${checks.length} 정상` : ''}</span>
+        <span className="spacer" />
+        <button onClick={() => p.onRerun()} disabled={p.busy || !!working} data-testid="doctor-rerun">다시 점검</button>
+        <button onClick={p.onClose}>닫기</button>
+      </div>
+      {checks.map((c) => {
+        const r = results[c.name];
+        const isWorking = working === c.name;
+        const act = c.action;
+        return (
+          <div key={c.name} className={`doctor-item d-${c.status}`} data-testid={`doctor-${c.name}`}>
+            <span className="icon">{c.status === 'ok' ? '✓' : c.status === 'warn' ? '!' : '✕'}</span>
+            <span className="doctor-name">{c.name}</span>
+            <span className="doctor-detail">
+              {c.detail}
+              {c.fix && c.status !== 'ok' && <span className="doctor-fix"> → {c.fix}</span>}
+              {r && <div className={r.ok ? 'ok-text' : 'err-text'}>{r.message}</div>}
+              {r?.output && !r.ok && <pre className="check-out">{r.output}</pre>}
+              {act?.action.kind === 'git-identity' && identity.open && c.status !== 'ok' && (
+                <div className="identity-form">
+                  <input type="text" placeholder="GitHub 아이디" value={identity.name} onChange={(e) => setIdentity({ ...identity, name: e.target.value })} data-testid="git-name" />
+                  <input type="text" placeholder="name@example.com" value={identity.email} onChange={(e) => setIdentity({ ...identity, email: e.target.value })} data-testid="git-email" />
+                  <button className="primary" disabled={!!working} onClick={() => doFix(c.name, { kind: 'git-identity', name: identity.name, email: identity.email })} data-testid="git-identity-save">
+                    저장
+                  </button>
+                </div>
+              )}
+            </span>
+            <span className="doctor-action">
+              {c.status !== 'ok' && act && !(act.action.kind === 'git-identity' && identity.open) && (
+                <button
+                  className="small"
+                  disabled={!!working || p.busy}
+                  title={act.action.kind === 'winget' ? 'winget으로 공식 패키지를 설치해요 (패키지 약관 동의 포함). 관리자 권한 창이 뜰 수 있어요.' : undefined}
+                  onClick={() => (act.action.kind === 'git-identity' ? setIdentity({ ...identity, open: true }) : doFix(c.name, act.action))}
+                  data-testid={`fix-${c.name}`}
+                >
+                  {isWorking ? (act.action.kind === 'winget' ? '설치 중…' : '진행 중…') : act.label}
+                </button>
+              )}
+              {c.status !== 'ok' && c.link && (
+                <button className="small" onClick={() => p.onLink(c.link!.url)}>{c.link.label}</button>
+              )}
+            </span>
+          </div>
+        );
+      })}
+      {working && <div className="faint">설치는 1~3분 걸릴 수 있어요. 관리자 권한 확인 창이 뜨면 허용하세요.</div>}
     </div>
   );
 }

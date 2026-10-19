@@ -17,8 +17,10 @@ export function resolveClaudeExe(): string {
     return override;
   }
   const dirs = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
-  // 공식 설치 프로그램(native)은 %USERPROFILE%\.local\bin에 설치한다. PATH에 없을 때를 대비한다.
+  // 공식 설치 프로그램(native)은 %USERPROFILE%\.local\bin, winget은 WinGet\Links에 둔다. PATH에 없을 때를 대비한다.
   if (process.env.USERPROFILE) dirs.push(path.join(process.env.USERPROFILE, '.local', 'bin'));
+  if (process.env.LOCALAPPDATA) dirs.push(path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'));
+  if (process.env.APPDATA) dirs.push(path.join(process.env.APPDATA, 'npm'));
   for (const d of dirs) {
     const exe = path.join(d, 'claude.exe');
     if (fs.existsSync(exe)) return exe;
