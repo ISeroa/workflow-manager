@@ -152,11 +152,23 @@ async function main() {
   const readme = ch.files.find((f) => f.path === 'docs/README.md');
   check('승인된 경로는 추가 허용으로 표시', readme?.category === 'allowed' && readme.extraAllowed);
 
-  // ── 보호 경로 사후 차단 ──
+  // ── 사람이 바꾼 보호 경로: 직접 작업 확인 전에는 Commit 거부 ──
   fs.appendFileSync(path.join(repo, 'protected/config.ini'), 'TAMPERED=1\n');
+  vw = waitVerify(svc);
+  await svc.verify(WP, 'CT-001');
+  await vw;
   ch = await svc.changes(WP, 'CT-001');
-  check('보호 경로 변경 시 Commit 차단', ch.blockers.some((b) => b.includes('protected/config.ini')));
-  execFileSync('git', ['checkout', '--', 'protected/config.ini'], { cwd: repo });
+  check('보호 경로 변경은 확인 대상으로 표시', ch.protectedFiles.includes('protected/config.ini') && !ch.blockers.some((b) => b.includes('protected/config.ini')), ch.blockers.join(' / '));
+  await expectError(
+    '보호 경로 직접 작업 확인 없이 Commit 거부',
+    () => svc.commit(WP, 'CT-001', { subject: '', approveOutOfScope: false, approveProtected: false, ackBinary: false, manualChecked: [MANUAL_CT1] }),
+    /직접 작업/,
+  );
+  // ── 계획 파일 변경은 작업 Commit에 섞을 수 없다 ──
+  fs.appendFileSync(path.join(repo, '.workflow/changes/WP-T3ST/tasks/CT-002.yaml'), '# note\n');
+  ch = await svc.changes(WP, 'CT-001');
+  check('계획 파일 변경이 섞이면 Commit 차단', ch.blockers.some((b) => b.includes('계획 파일')), ch.blockers.join(' / '));
+  execFileSync('git', ['checkout', '--', 'protected/config.ini', '.workflow/changes/WP-T3ST/tasks/CT-002.yaml'], { cwd: repo });
 
   // ── Commit ──
   ch = await svc.changes(WP, 'CT-001');
@@ -165,8 +177,8 @@ async function main() {
     await svc.verify(WP, 'CT-001');
     await vw;
   }
-  await expectError('사람 확인 항목 미체크 시 Commit 거부', () => svc.commit(WP, 'CT-001', { subject: '', approveOutOfScope: false, ackBinary: false, manualChecked: [] }), /체크/);
-  const c1 = await svc.commit(WP, 'CT-001', { subject: '', approveOutOfScope: false, ackBinary: false, manualChecked: [MANUAL_CT1] });
+  await expectError('사람 확인 항목 미체크 시 Commit 거부', () => svc.commit(WP, 'CT-001', { subject: '', approveOutOfScope: false, approveProtected: false, ackBinary: false, manualChecked: [] }), /체크/);
+  const c1 = await svc.commit(WP, 'CT-001', { subject: '', approveOutOfScope: false, approveProtected: false, ackBinary: false, manualChecked: [MANUAL_CT1] });
   const msg = gitOut('log', '-1', '--format=%B');
   check('trailer Commit', msg.startsWith('CT-001: ') && msg.includes('Workflow-Package: WP-T3ST') && msg.includes('Workflow-Task: CT-001'));
   snap = await svc.snapshot();
@@ -189,7 +201,7 @@ async function main() {
   await svc.start(WP, 'CT-002');
   r = await w;
   check('CT-002 실행·자동 검증 통과', r.done.outcome === 'success' && r.verify?.outcome === 'passed', r.verify?.results.map((x) => x.tail.trim()).join(' | '));
-  await svc.commit(WP, 'CT-002', { subject: '', approveOutOfScope: false, ackBinary: false, manualChecked: [] });
+  await svc.commit(WP, 'CT-002', { subject: '', approveOutOfScope: false, approveProtected: false, ackBinary: false, manualChecked: [] });
 
   // ── 계획 변경 Commit ──
   const pkgFile = path.join(repo, '.workflow/changes/WP-T3ST/package.yaml');

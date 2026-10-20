@@ -40,7 +40,7 @@ Diff·검증 확인 → 승인 Commit → Push → GitHub PR 생성까지 관리
 base: main
 mode: team                 # team: Commit마다 Push 후 다음 작업 / solo: Push 강제 없음
 remote: origin             # 선택
-protected:                 # 항상 Commit 차단 (.workflow/**는 자동 포함)
+protected:                 # Claude는 절대 수정 불가 (.workflow/**는 자동 포함)
   - Content/**
   - "*.uproject"
 commands:                  # verify에서 use로 참조. cmd로 실행된다.
@@ -85,7 +85,11 @@ verify:                    # 선택
   - manual: PIE에서 공격 시 피격 이펙트가 1회 재생된다
 ```
 
-경로 규칙: 보호 경로 → Commit 차단 / 허용 경로 → 정상 / 그 외 → 범위 밖(실행 중 거부, 사용자 승인 시 허용).
+경로 규칙:
+- 보호 경로 → Claude는 편집할 수 없다 (실행 중 거부, 승인 불가). 사람이 에디터 등으로 직접 바꾼 보호 경로 파일은
+  "내가 직접 작업했다"고 체크해야 Commit에 포함된다. `.workflow/**` 변경은 작업 Commit에 섞을 수 없고 [계획 변경 Commit]으로 따로 남긴다.
+- 허용 경로 → 정상
+- 그 외 → 범위 밖 (실행 중 거부, 사용자 승인 시 허용)
 `.uasset`, `.umap` 등 바이너리 변경은 "직접 확인" 체크 후 Commit할 수 있다.
 
 ## 상태는 어디에 저장되나

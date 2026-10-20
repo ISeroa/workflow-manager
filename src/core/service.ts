@@ -505,8 +505,11 @@ export class WorkflowService extends EventEmitter {
       if (head !== rec.startHead) blockers.push(`HEAD가 실행 중에 바뀌었어요 (${rec.startHead.slice(0, 7)} → ${head.slice(0, 7)}).`);
     }
     if (files.length === 0) blockers.push('Commit할 변경이 없어요.');
-    const prot = files.filter((f) => f.category === 'protected');
-    if (prot.length) blockers.push(`보호 경로가 변경됐어요: ${prot.map((f) => f.path).join(', ')}`);
+    // Claude는 보호 경로를 편집할 수 없으므로(권한 거부, 셸 없음) 여기 남은 보호 경로 변경은 사람이 한 것이다.
+    // 계획 파일(.workflow)만 따로 Commit하도록 막고, 나머지는 사람이 직접 확인하면 포함할 수 있다.
+    const plan = files.filter((f) => f.path.startsWith('.workflow/') || f.origPath?.startsWith('.workflow/'));
+    if (plan.length) blockers.push(`계획 파일 변경이 섞여 있어요: ${plan.map((f) => f.path).join(', ')}. 작업 Commit과 분리해 주세요.`);
+    const protectedFiles = files.filter((f) => f.category === 'protected' && !plan.includes(f)).map((f) => f.path);
 
     const verify = await this.verifyView(wp, ct);
     if (!verify.passed) {
@@ -519,6 +522,7 @@ export class WorkflowService extends EventEmitter {
       files,
       blockers,
       needsOutOfScopeApproval: files.some((f) => f.category === 'outOfScope'),
+      protectedFiles,
       needsBinaryAck: files.some((f) => f.binary),
       verify,
       commitSubject: task.title,
@@ -585,6 +589,9 @@ export class WorkflowService extends EventEmitter {
     const view = await this.changes(wp, ct);
     if (view.blockers.length) throw new UserError(view.blockers.join(' '));
     if (view.needsOutOfScopeApproval && !req.approveOutOfScope) throw new UserError('범위 밖 변경을 승인해야 Commit할 수 있어요.');
+    if (view.protectedFiles.length && !req.approveProtected) {
+      throw new UserError(`보호 경로 변경(${view.protectedFiles.join(', ')})을 직접 작업했다고 확인해야 Commit할 수 있어요.`);
+    }
     if (view.needsBinaryAck && !req.ackBinary) throw new UserError('바이너리 파일을 직접 확인했다고 체크해야 Commit할 수 있어요.');
     const manual = view.verify.items.filter((i) => i.kind === 'manual').map((i) => i.name);
     const unchecked = manual.filter((m) => !req.manualChecked.includes(m));

@@ -116,28 +116,29 @@ export async function runSmoke(win: BrowserWindow, service: WorkflowService) {
     await shot('extra-allowed');
     record('범위 밖 경로 허용 후 같은 세션으로 이어서 수정', true);
 
-    // 보호 경로 차단
-    fs.appendFileSync(path.join(repo, 'protected/config.ini'), 'TAMPERED=1\n');
+    // 사람이 직접 바꾼 보호 경로 파일 (에디터에서 저장한 에셋·맵과 같은 경우)
+    fs.appendFileSync(path.join(repo, 'protected/config.ini'), 'EDITED_BY_HUMAN=1\n');
     await clickText('새로고침');
-    await waitFor('보호 경로 차단 표시', `${q('blockers')}?.textContent.includes('protected/config.ini')`, 30_000);
-    await shot('protected-blocked');
-    record('보호 경로 변경 시 Commit 차단', await js<boolean>(`${q('commit')}.disabled`));
-    execFileSync('git', ['checkout', '--', 'protected/config.ini'], { cwd: repo });
-    await clickText('새로고침');
-    await waitFor('차단 해제', `!${q('blockers')} || !${q('blockers')}.textContent.includes('protected')`, 30_000);
+    await waitFor('보호 경로 확인 체크박스 표시', q('approve-protected'), 30_000);
 
-    // 검증 다시 (보호 파일 복구로 지문이 바뀌었으면) → 사람 확인 체크 → Commit
+    // 검증 다시 (파일이 바뀌어 낡음) → 사람 확인 체크 → 보호 경로 확인 전에는 Commit 불가
     if (!(await verifyText()).includes('통과') || (await verifyText()).includes('낡음')) {
       await click('verify-run');
       await waitFor('재검증', `${idle} && ${q('verify')}?.textContent.includes('통과') && !${q('verify')}.textContent.includes('낡음')`, 120_000);
     }
     record('사람 확인 미체크 시 Commit 버튼 비활성', await js<boolean>(`${q('commit')}.disabled`));
     await js(`${q('manual-함수 이름이 작업 정의와 같다')}.click()`);
+    await sleep(300);
+    await shot('protected-needs-approval');
+    record('보호 경로 직접 작업 확인 전 Commit 버튼 비활성', await js<boolean>(`${q('commit')}.disabled`));
+    await js(`${q('approve-protected')}.click()`);
     await click('commit');
     await waitFor('Commit 완료', q('committed'), 30_000);
     await shot('ct001-committed');
     const msg = git('log', '-1', '--format=%B');
     record('trailer Commit', msg.startsWith('CT-001:') && msg.includes('Workflow-Task: CT-001'), msg.split('\n')[0]);
+    const committedFiles = git('show', '--name-only', '--format=', 'HEAD');
+    record('직접 작업 확인한 보호 경로 파일이 Commit에 포함', committedFiles.split('\n').includes('protected/config.ini'), committedFiles.replace(/\n/g, ', '));
 
     // Push (Commit 카드의 버튼)
     await click('push');

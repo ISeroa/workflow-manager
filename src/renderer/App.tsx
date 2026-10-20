@@ -32,7 +32,7 @@ type Live = { names: string[]; current: number; outputs: string[]; results: (Che
 const STATE_ICON: Record<TaskState, string> = { done: '✓', next: '▸', pending: '○', running: '◐', review: '◑' };
 const STATE_LABEL: Record<TaskState, string> = { done: '완료', next: '다음', pending: '대기', running: '실행 중', review: '검토 필요' };
 const FILE_STATUS: Record<ChangedFile['status'], string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R' };
-const CATEGORY_LABEL = { allowed: '', outOfScope: '범위 밖', protected: '보호 경로' };
+const CATEGORY_LABEL = { allowed: '', outOfScope: '범위 밖', protected: '보호 경로 · 직접 작업' };
 const OUTCOME_LABEL = { success: '완료', error: '실패', cancelled: '중단됨', timeout: '시간 초과' };
 const CHECK_LABEL: Record<CheckResult['outcome'], string> = {
   passed: '통과',
@@ -87,6 +87,7 @@ export function App() {
   const [attachLog, setAttachLog] = useState(false);
   const [subject, setSubject] = useState('');
   const [approveOos, setApproveOos] = useState(false);
+  const [approveProt, setApproveProt] = useState(false);
   const [ackBinary, setAckBinary] = useState(false);
   const [lastCommit, setLastCommit] = useState<{ ct: string; hash: string } | null>(null);
   const [doctor, setDoctor] = useState<DoctorCheck[] | null>(null);
@@ -220,6 +221,7 @@ export function App() {
   useEffect(() => {
     setSubject('');
     setApproveOos(false);
+    setApproveProt(false);
     setAckBinary(false);
     setAttachLog(false);
     setPrTitle('');
@@ -342,7 +344,7 @@ export function App() {
   const commit = () =>
     sel &&
     act(async () => {
-      const r = await call(window.wf.commit(sel.wp, sel.ct, { subject, approveOutOfScope: approveOos, ackBinary, manualChecked }), setError);
+      const r = await call(window.wf.commit(sel.wp, sel.ct, { subject, approveOutOfScope: approveOos, approveProtected: approveProt, ackBinary, manualChecked }), setError);
       if (r) {
         setLastCommit({ ct: sel.ct, hash: r.hash });
         const s = await call(window.wf.snapshot(), setError);
@@ -406,7 +408,7 @@ export function App() {
   const manualItems = (isPrSel ? pr?.verify.items : task?.verify)?.filter((i) => i.kind === 'manual') ?? [];
   const manualOk = manualItems.every((i) => manualChecked.includes(i.name));
   const commitDisabled =
-    !idle || !changes || changes.blockers.length > 0 || (changes.needsOutOfScopeApproval && !approveOos) || (changes.needsBinaryAck && !ackBinary) || !manualOk;
+    !idle || !changes || changes.blockers.length > 0 || (changes.needsOutOfScopeApproval && !approveOos) || (changes.protectedFiles.length > 0 && !approveProt) || (changes.needsBinaryAck && !ackBinary) || !manualOk;
   const failedResult = changes?.verify.fresh ? changes.verify.results?.find((r) => r.outcome !== 'passed' && r.outcome !== 'skipped') : undefined;
 
   return (
@@ -741,6 +743,12 @@ export function App() {
                       <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="subject" />
                     </div>
                     <div className="trailers">{changes.commitTrailers.join('  ·  ')}</div>
+                    {changes.protectedFiles.length > 0 && (
+                      <label className="check" style={{ color: 'var(--danger)' }}>
+                        <input type="checkbox" checked={approveProt} onChange={(e) => setApproveProt(e.target.checked)} data-testid="approve-protected" />
+                        보호 경로 변경({changes.protectedFiles.join(', ')})은 내가 직접 작업했고 이 Commit에 포함할게요
+                      </label>
+                    )}
                     {changes.needsOutOfScopeApproval && (
                       <label className="check" style={{ color: 'var(--warn)' }}>
                         <input type="checkbox" checked={approveOos} onChange={(e) => setApproveOos(e.target.checked)} />
@@ -1136,6 +1144,7 @@ function NextBar(p: {
     const c = p.changes;
     if (p.lastDone && p.lastDone.outcome !== 'success') text = `Claude 실행이 ${OUTCOME_LABEL[p.lastDone.outcome]} 상태로 끝났어요. 변경을 검토하거나 수정 요청하세요.`;
     else if (c && c.blockers.length) text = c.blockers[0];
+    else if (c && c.protectedFiles.length) text = '보호 경로 변경이 직접 작업한 것인지 확인하고 체크하세요.';
     else if (c && c.needsOutOfScopeApproval) text = '범위 밖 변경을 확인하고 승인하세요.';
     else if (!p.manualOk) text = '사람이 확인할 항목을 체크하세요.';
     else text = '변경과 검증 결과를 검토한 뒤 Commit을 승인하세요.';

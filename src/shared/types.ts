@@ -164,6 +164,8 @@ export interface ChangesView {
   files: ChangedFile[];
   blockers: string[];
   needsOutOfScopeApproval: boolean;
+  /** 사람이 직접 바꾼 보호 경로 파일 (Claude는 보호 경로를 편집할 수 없다). 확인 체크 후 포함한다. */
+  protectedFiles: string[];
   needsBinaryAck: boolean;
   verify: VerifyView;
   commitSubject: string;
@@ -173,6 +175,8 @@ export interface ChangesView {
 export interface CommitRequest {
   subject: string;
   approveOutOfScope: boolean;
+  /** 보호 경로 변경을 사람이 직접 했다고 확인 */
+  approveProtected: boolean;
   ackBinary: boolean;
   /** 사람이 확인한 manual 검증 항목 이름 */
   manualChecked: string[];
